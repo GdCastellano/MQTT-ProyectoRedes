@@ -35,10 +35,14 @@ class MonitoringService:
         """
         while self.running:
             output = ping_host(self.host, PING_COUNT)
-            latency, reachable = parse_ping_output(output)
+            latency, ttl, reachable = parse_ping_output(output)
             if not reachable:
                 self.alert_callback(f"ALERTA: El host {self.host} está inalcanzable.")
             else:
-                msg = f"Host: {self.host}, Latencia promedio: {latency} ms"
-                self.mqtt_client.publish(msg)
+                data = {
+                    "host": self.host,
+                    "latencia": latency,
+                    "saltos": ttl
+                }
+                self.mqtt_client.publish(data)
             time.sleep(MONITOR_INTERVAL)

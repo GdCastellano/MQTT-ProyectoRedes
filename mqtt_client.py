@@ -1,3 +1,4 @@
+import json
 import paho.mqtt.client as mqtt
 from config import MQTT_BROKER, MQTT_PORT, MQTT_TOPIC
 
@@ -10,7 +11,9 @@ class MQTTClient:
         """
         Publica un mensaje en el tópico MQTT configurado.
         """
-        self.client.publish(MQTT_TOPIC, data)
+        # data debe ser un diccionario
+        self.client.publish(MQTT_TOPIC, json.dumps(data))
+        print(json.dumps(data))
 
 # Uso:
 # mqtt_client = MQTTClient()

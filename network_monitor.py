@@ -18,22 +18,25 @@ def ping_host(host, count=4):
 
 def parse_ping_output(output):
     """
-    Analiza la salida del ping y extrae la latencia promedio.
-    Retorna (latencia_promedio_ms, host_alcanzable)
+    Analiza la salida del ping y extrae la latencia promedio y el TTL.
+    Retorna (latencia_promedio_ms, ttl, host_alcanzable)
     """
-    # Para Windows en español: busca "Media = XXms"
-    match = re.search(r"Media = (\d+)ms", output)
-    if match:
-        return int(match.group(1)), True
-    # Para Windows en inglés: busca "Average = XXms"
-    match = re.search(r"Average = (\d+)ms", output)
-    if match:
-        return int(match.group(1)), True
-    # Para Linux: busca "avg"
-    match = re.search(r"= [\d\.]+/([\d\.]+)/", output)
-    if match:
-        return float(match.group(1)), True
-    # Si no se encuentra latencia, se asume inalcanzable
-    return None, False
+    # Latencia promedio (Windows español)
+    match_lat = re.search(r"Media = (\d+)ms", output)
+    # Latencia promedio (Windows inglés)
+    if not match_lat:
+        match_lat = re.search(r"Average = (\d+)ms", output)
+    # Latencia promedio (Linux)
+    if not match_lat:
+        match_lat = re.search(r"= [\d\.]+/([\d\.]+)/", output)
+    latency = int(match_lat.group(1)) if match_lat else None
+
+    # TTL: busca el primer TTL en la salida
+    match_ttl = re.search(r"TTL=(\d+)", output, re.IGNORECASE)
+    ttl = int(match_ttl.group(1)) if match_ttl else None
+
+    # Considera alcanzable si hay latencia y TTL
+    reachable = latency is not None and ttl is not None
+    return latency, ttl, reachable
 
 # Nota: El número de saltos (TTL) requiere análisis adicional y puede variar según el sistema.

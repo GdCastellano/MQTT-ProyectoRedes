@@ -180,3 +180,20 @@ La entrega final del proyecto debe ser valorada considerando los siguientes esce
 Este proyecto se basa en una arquitectura modular que integra un bot de Telegram, la ejecución de comandos de red y la comunicación a través de MQTT. Cada módulo se desarrolla y prueba de manera independiente para luego integrar todo el sistema, asegurando robustez, monitoreo en tiempo real y control de alertas. Esta explicación detallada proporciona el contexto y la guía necesaria para que otra IA o asistente de programación pueda ayudarte a implementar el proyecto en Python, utilizando las librerías mencionadas y siguiendo las pautas de seguridad y robustez recomendadas.
 
 Si deseas profundizar en alguno de los aspectos, por ejemplo, ejemplos de código para la integración del cliente MQTT o el manejo asíncrono en Python para el bot, podemos abordar esos detalles de forma más específica. También podemos explorar estrategias para mejorar la escalabilidad o la gestión de logs y errores en ambientes de producción.
+
+---
+
+## Configuración del archivo `.env`
+
+Crea un archivo llamado `.env` en la raíz del proyecto y agrega las siguientes variables de entorno:
+
+```
+TELEGRAM_TOKEN=tu_token_de_telegram
+MQTT_BROKER=localhost
+MQTT_PORT=1883
+MQTT_TOPIC=mensaje_grupo
+PING_COUNT=4
+MONITOR_INTERVAL=5
+```
+
+Asegúrate de reemplazar `tu_token_de_telegram` con tu token real de Telegram.

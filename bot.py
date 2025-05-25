@@ -17,10 +17,12 @@ async def destino(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     host = context.args[0]
     output = ping_host(host, PING_COUNT)
-    latency, reachable = parse_ping_output(output)
+    latency, ttl, reachable = parse_ping_output(output)
     if update.message:
         if reachable:
-            await update.message.reply_text(f"Latencia promedio a {host}: {latency} ms")
+            await update.message.reply_text(
+                f"Latencia promedio a {host}: {latency} ms\nSaltos (TTL): {ttl}"
+            )
         else:
             await update.message.reply_text(f"No se pudo alcanzar el host {host}.")
 
