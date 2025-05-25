@@ -21,15 +21,18 @@ def parse_ping_output(output):
     Analiza la salida del ping y extrae la latencia promedio.
     Retorna (latencia_promedio_ms, host_alcanzable)
     """
-    # Buscar latencia promedio según el sistema operativo
-    if "Average" in output:  # Windows
-        match = re.search(r"Average = (\d+)ms", output)
-        if match:
-            return float(match.group(1)), True
-    elif "avg" in output:  # Linux
-        match = re.search(r"= [\d\.]+/([\d\.]+)/", output)
-        if match:
-            return float(match.group(1)), True
+    # Para Windows en español: busca "Media = XXms"
+    match = re.search(r"Media = (\d+)ms", output)
+    if match:
+        return int(match.group(1)), True
+    # Para Windows en inglés: busca "Average = XXms"
+    match = re.search(r"Average = (\d+)ms", output)
+    if match:
+        return int(match.group(1)), True
+    # Para Linux: busca "avg"
+    match = re.search(r"= [\d\.]+/([\d\.]+)/", output)
+    if match:
+        return float(match.group(1)), True
     # Si no se encuentra latencia, se asume inalcanzable
     return None, False
 

@@ -12,15 +12,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def destino(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Debes especificar un host. Ejemplo: /destino 8.8.8.8")
+        if update.message:
+            await update.message.reply_text("Debes especificar un host. Ejemplo: /destino 8.8.8.8")
         return
     host = context.args[0]
     output = ping_host(host, PING_COUNT)
     latency, reachable = parse_ping_output(output)
-    if reachable:
-        await update.message.reply_text(f"Latencia promedio a {host}: {latency} ms")
-    else:
-        await update.message.reply_text(f"No se pudo alcanzar el host {host}.")
+    if update.message:
+        if reachable:
+            await update.message.reply_text(f"Latencia promedio a {host}: {latency} ms")
+        else:
+            await update.message.reply_text(f"No se pudo alcanzar el host {host}.")
 
 async def monitorear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
