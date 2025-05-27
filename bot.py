@@ -32,10 +32,11 @@ async def monitorear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     host = context.args[0]
     user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
 
     def alert_callback(msg):
         # Enviar alerta al usuario
-        context.application.create_task(update.message.reply_text(msg))
+        context.application.create_task(context.bot.send_message(chat_id=chat_id, text=msg))
 
     # Detener monitoreo previo si existe
     if user_id in monitoring_services:
