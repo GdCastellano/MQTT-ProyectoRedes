@@ -17,4 +17,4 @@ class MQTTClient:
 
 # Uso:
 # mqtt_client = MQTTClient()
-# mqtt_client.publish("mensaje")
+# mqtt_client.publish({"key": "value"})
