@@ -29,7 +29,7 @@ def parse_ping_output(output):
     # Latencia promedio (Linux)
     if not match_lat:
         match_lat = re.search(r"= [\d\.]+/([\d\.]+)/", output)
-    latency = int(match_lat.group(1)) if match_lat else None
+    latency = round(float(match_lat.group(1))) if match_lat else None
 
     # TTL: busca el primer TTL en la salida
     match_ttl = re.search(r"TTL=(\d+)", output, re.IGNORECASE)
