@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from config import TELEGRAM_TOKEN, PING_COUNT
 from network_monitor import ping_host, parse_ping_output
@@ -6,6 +6,14 @@ from monitoring_service import MonitoringService
 
 # Diccionario para guardar servicios de monitoreo por usuario
 monitoring_services = {}
+
+# Definir los comandos y descripciones para el menú del bot
+COMMANDS = [
+    BotCommand("start", "Inicia el bot y muestra el mensaje de bienvenida"),
+    BotCommand("destino", "Realiza un ping a un host/IP. Ej: /destino 8.8.8.8"),
+    BotCommand("monitorear", "Inicia el monitoreo recurrente de un host"),
+    BotCommand("detener", "Detiene el monitoreo activo"),
+]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Bienvenido al bot de monitoreo. Usa /destino <host> para comenzar.")
@@ -61,6 +69,12 @@ def main():
     app.add_handler(CommandHandler("destino", destino))
     app.add_handler(CommandHandler("monitorear", monitorear))
     app.add_handler(CommandHandler("detener", detener))
+
+    # Registrar comandos en el menú del bot
+    async def set_commands(app):
+        await app.bot.set_my_commands(COMMANDS)
+    app.post_init = set_commands
+
     app.run_polling()
 
 if __name__ == "__main__":
