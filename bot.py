@@ -1,5 +1,5 @@
-from telegram import Update, BotCommand
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update, BotCommand, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from config import TELEGRAM_TOKEN, PING_COUNT
 from network_monitor import ping_host, parse_ping_output
 from monitoring_service import MonitoringService
@@ -15,15 +15,33 @@ COMMANDS = [
     BotCommand("detener", "Detiene el monitoreo activo"),
 ]
 
+# Estados de la conversación
+WAITING_HOST = 1
+WAITING_MONITOR_HOST = 2
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Bienvenido al bot de monitoreo. Usa /destino <host> para comenzar.")
+    # Crear el teclado personalizado
+    keyboard = [
+        [KeyboardButton("/destino"), KeyboardButton("/monitorear")],
+        [KeyboardButton("/detener")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+    
+    await update.message.reply_text(
+        "Bienvenido al bot de monitoreo. Usa los botones o escribe /destino <host> para comenzar.",
+        reply_markup=reply_markup
+    )
 
 async def destino(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        if update.message:
-            await update.message.reply_text("Debes especificar un host. Ejemplo: /destino 8.8.8.8")
-        return
+        await update.message.reply_text("Por favor, ingresa la dirección IP o el host a monitorear:")
+        return WAITING_HOST
+    
     host = context.args[0]
+    await process_ping(update, host)
+    return ConversationHandler.END
+
+async def process_ping(update: Update, host: str):
     output = ping_host(host, PING_COUNT)
     latency, ttl, reachable = parse_ping_output(output)
     if update.message:
@@ -34,11 +52,21 @@ async def destino(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text(f"No se pudo alcanzar el host {host}.")
 
+async def receive_host(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    host = update.message.text
+    await process_ping(update, host)
+    return ConversationHandler.END
+
 async def monitorear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("Debes especificar un host. Ejemplo: /monitorear 8.8.8.8")
-        return
+        await update.message.reply_text("Por favor, ingresa la dirección IP o el host a monitorear:")
+        return WAITING_MONITOR_HOST
+    
     host = context.args[0]
+    await start_monitoring(update, host)
+    return ConversationHandler.END
+
+async def start_monitoring(update: Update, host: str):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
 
@@ -54,6 +82,11 @@ async def monitorear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     service.start()
     await update.message.reply_text(f"Monitoreo iniciado para {host}.")
 
+async def receive_monitor_host(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    host = update.message.text
+    await start_monitoring(update, host)
+    return ConversationHandler.END
+
 async def detener(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id in monitoring_services:
@@ -65,9 +98,28 @@ async def detener(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+    # Crear el manejador de conversación para el comando destino
+    destino_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("destino", destino)],
+        states={
+            WAITING_HOST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_host)],
+        },
+        fallbacks=[],
+    )
+
+    # Crear el manejador de conversación para el comando monitorear
+    monitorear_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("monitorear", monitorear)],
+        states={
+            WAITING_MONITOR_HOST: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_monitor_host)],
+        },
+        fallbacks=[],
+    )
+    
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("destino", destino))
-    app.add_handler(CommandHandler("monitorear", monitorear))
+    app.add_handler(destino_conv_handler)
+    app.add_handler(monitorear_conv_handler)
     app.add_handler(CommandHandler("detener", detener))
 
     # Registrar comandos en el menú del bot
