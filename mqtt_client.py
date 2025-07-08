@@ -11,9 +11,24 @@ from config import (
     MQTT_KEEPALIVE, MQTT_CONNECT_TIMEOUT, MQTT_MAX_RETRIES
 )
 
+# Detectar la versión de paho-mqtt para compatibilidad
+try:
+    # paho-mqtt 2.x
+    from paho.mqtt.client import CallbackAPIVersion
+    MQTT_V2_AVAILABLE = True
+except ImportError:
+    # paho-mqtt 1.x
+    MQTT_V2_AVAILABLE = False
+
 class SecureMQTTClient:
     """
     Cliente MQTT seguro con autenticación, SSL/TLS, manejo de errores y reconexión automática.
+    
+    Compatible con paho-mqtt 1.x y 2.x:
+    - Para paho-mqtt 2.x: usa callback_api_version=VERSION1 para mantener compatibilidad
+    - Para paho-mqtt 1.x: usa la sintaxis original
+    
+    Esto resuelve el error "Unsupported callback API version 2.0" en versiones recientes.
     """
     
     def __init__(self, client_id=None):
@@ -34,8 +49,18 @@ class SecureMQTTClient:
     def _setup_client(self):
         """Configura el cliente MQTT con todas las opciones de seguridad."""
         try:
-            # Crear cliente con client_id único
-            self.client = mqtt.Client(self.client_id)
+            # Crear cliente con compatibilidad para ambas versiones de paho-mqtt
+            if MQTT_V2_AVAILABLE:
+                # paho-mqtt 2.x - usar callback API version 1 para compatibilidad
+                self.client = mqtt.Client(
+                    client_id=self.client_id, 
+                    callback_api_version=CallbackAPIVersion.VERSION1
+                )
+                self.logger.info("Cliente MQTT creado con paho-mqtt 2.x (callback API v1)")
+            else:
+                # paho-mqtt 1.x - usar sintaxis original
+                self.client = mqtt.Client(self.client_id)
+                self.logger.info("Cliente MQTT creado con paho-mqtt 1.x")
             
             # Configurar callbacks
             self.client.on_connect = self._on_connect

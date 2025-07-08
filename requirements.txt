@@ -1,0 +1,15 @@
+# Dependencias del Bot de Monitoreo de Red
+# Compatible con paho-mqtt 1.x y 2.x
+
+# Cliente MQTT - ambas versiones soportadas
+paho-mqtt>=1.6.0
+
+# Bot de Telegram
+python-telegram-bot>=20.0
+
+# Variables de entorno
+python-dotenv>=0.19.0
+
+# Opcional: para instalaciones específicas descomenta la línea apropiada:
+# paho-mqtt==1.6.1  # Para usar versión 1.x (sintaxis legacy)
+# paho-mqtt>=2.0.0  # Para usar versión 2.x (nueva API con callback_api_version) 

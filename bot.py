@@ -5,6 +5,8 @@ from network_monitor import ping_host, parse_ping_output, NetworkError
 from monitoring_service import MonitoringService
 from logger_service import bot_logger
 from datetime import datetime
+import requests
+import os
 
 # Diccionario para guardar servicios de monitoreo por usuario
 monitoring_services = {}
