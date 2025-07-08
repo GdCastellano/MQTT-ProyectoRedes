@@ -6,15 +6,35 @@
 TELEGRAM_TOKEN=your_telegram_bot_token_here
 
 # ==================== MQTT BROKER ====================
-# Configuración del broker MQTT para publicar métricas
+# Configuración básica del broker MQTT
 MQTT_BROKER=localhost
 MQTT_PORT=1883
 MQTT_TOPIC=network/monitoring
 
+# ==================== SEGURIDAD MQTT ====================
+# Autenticación (opcional pero recomendado)
+MQTT_USERNAME=tu_usuario_mqtt
+MQTT_PASSWORD=tu_password_mqtt
+
+# SSL/TLS (recomendado para producción)
+MQTT_USE_SSL=false
+MQTT_CA_CERT=/path/to/ca.crt
+MQTT_CERT_FILE=/path/to/client.crt
+MQTT_KEY_FILE=/path/to/client.key
+
+# Configuración de conexión MQTT
+MQTT_KEEPALIVE=60
+MQTT_CONNECT_TIMEOUT=10
+MQTT_MAX_RETRIES=3
+
 # ==================== MONITOREO ====================
 # Configuración de parámetros de ping y monitoreo
 PING_COUNT=4
-MONITOR_INTERVAL=5
+MONITOR_INTERVAL=10
+
+# Configuración de timeouts para comandos de red  
+PING_TIMEOUT=15
+MAX_PING_RETRIES=2
 
 # ==================== LOGGING ====================
 # Configuración del sistema de logging
@@ -32,13 +52,34 @@ LOG_RETENTION_DAYS=30
 ENABLE_DEBUG_LOGS=false
 
 # ==================== EJEMPLO DE CONFIGURACIÓN COMPLETA ====================
+# Configuración básica
 # TELEGRAM_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
-# MQTT_BROKER=192.168.1.100
-# MQTT_PORT=1883
+
+# Configuración MQTT con seguridad
+# MQTT_BROKER=mqtt.ejemplo.com
+# MQTT_PORT=8883
 # MQTT_TOPIC=home/network/monitoring
+# MQTT_USERNAME=monitor_user
+# MQTT_PASSWORD=secure_password_123
+# MQTT_USE_SSL=true
+# MQTT_CA_CERT=/certs/ca.crt
+
+# Configuración de monitoreo seguro
 # PING_COUNT=4
 # MONITOR_INTERVAL=10
+# PING_TIMEOUT=15
+# MAX_PING_RETRIES=2
+
+# Configuración de logging
 # LOGS_DIRECTORY=./logs
 # LOG_LEVEL=INFO
 # LOG_RETENTION_DAYS=60
-# ENABLE_DEBUG_LOGS=false 
+# ENABLE_DEBUG_LOGS=false
+
+# ==================== NOTAS DE SEGURIDAD ====================
+# 1. CAMBIAR todas las contraseñas por defecto
+# 2. USAR SSL/TLS en producción (MQTT_USE_SSL=true)
+# 3. CONFIGURAR certificados adecuados
+# 4. LIMITAR acceso de red al broker MQTT
+# 5. MONITOREAR logs regularmente
+# 6. MANTENER intervalo >= 6 segundos para evitar sobrecarga 

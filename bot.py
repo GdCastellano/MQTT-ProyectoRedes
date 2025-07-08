@@ -1,7 +1,7 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from config import TELEGRAM_TOKEN, PING_COUNT, LOG_RETENTION_DAYS
-from network_monitor import ping_host, parse_ping_output
+from config import TELEGRAM_TOKEN, PING_COUNT, LOG_RETENTION_DAYS, MONITOR_INTERVAL
+from network_monitor import ping_host, parse_ping_output, NetworkError
 from monitoring_service import MonitoringService
 from logger_service import bot_logger
 from datetime import datetime
@@ -28,6 +28,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • `/destino <host>` - Hacer ping a un host
 • `/monitorear <host>` - Iniciar monitoreo continuo
 • `/detener` - Detener monitoreo activo
+• `/estadisticas` - Ver métricas del monitoreo
 
 📊 **Comandos de logs:**
 • `/logs` - Ver información de tu sesión actual
@@ -80,23 +81,82 @@ async def destino(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     host = context.args[0]
     try:
-        output = ping_host(host, PING_COUNT)
-        latency, ttl, reachable = parse_ping_output(output)
+        # Informar que se está procesando
+        processing_msg = await update.message.reply_text(f"🏓 Haciendo ping a `{host}`...", parse_mode='Markdown')
         
-        # Registrar resultado del ping
-        bot_logger.log_ping_result(user_id, host, latency, ttl, reachable, output)
-        
-        if update.message:
+        try:
+            output = ping_host(host, PING_COUNT)
+            latency, ttl, reachable, ping_stats = parse_ping_output(output)
+            
+            # Registrar resultado del ping con estadísticas
+            bot_logger.log_ping_result(user_id, host, latency, ttl, reachable, output)
+            
+            # Eliminar mensaje de procesamiento
+            await context.bot.delete_message(chat_id=chat_id, message_id=processing_msg.message_id)
+            
             if reachable:
-                await update.message.reply_text(
-                    f"Latencia promedio a {host}: {latency} ms\nSaltos (TTL): {ttl}"
-                )
+                # Construir mensaje con estadísticas adicionales
+                response_msg = f"✅ **Ping exitoso a {host}:**\n\n"
+                response_msg += f"📊 Latencia promedio: **{latency} ms**\n"
+                response_msg += f"🔢 Saltos (TTL): **{ttl}**\n"
+                
+                # Agregar estadísticas adicionales si están disponibles
+                if ping_stats:
+                    if ping_stats.get('packet_loss') is not None:
+                        response_msg += f"📦 Pérdida de paquetes: **{ping_stats['packet_loss']}%**\n"
+                    if ping_stats.get('min_latency') and ping_stats.get('max_latency'):
+                        response_msg += f"⚡ Rango latencia: **{ping_stats['min_latency']}-{ping_stats['max_latency']} ms**\n"
+                
+                response_msg += f"\n💡 Usa `/monitorear {host}` para monitoreo continuo."
+                
+                await update.message.reply_text(response_msg, parse_mode='Markdown')
             else:
-                await update.message.reply_text(f"No se pudo alcanzar el host {host}.")
+                error_details = ""
+                if ping_stats and 'error' in ping_stats:
+                    error_details = f"\n🔍 Detalle: `{ping_stats['error'][:100]}...`"
+                
+                await update.message.reply_text(
+                    f"❌ **No se pudo alcanzar el host {host}.**\n\n"
+                    "Posibles causas:\n"
+                    "• Host no responde a ping\n"
+                    "• Dirección incorrecta\n"
+                    "• Problemas de conectividad\n"
+                    "• Firewall bloqueando ICMP\n\n"
+                    f"{error_details}\n"
+                    "🔄 Intenta con otra dirección.",
+                    parse_mode='Markdown'
+                )
+                
+        except NetworkError as net_err:
+            # Error específico de red (validación, DNS, etc.)
+            await context.bot.delete_message(chat_id=chat_id, message_id=processing_msg.message_id)
+            bot_logger.log_error(user_id, f"Error de red: {net_err}", f"Host: {host}")
+            
+            await update.message.reply_text(
+                f"🚫 **Error de red con {host}:**\n\n"
+                f"📋 Detalle: `{str(net_err)}`\n\n"
+                "Verifica que:\n"
+                "• La dirección sea válida\n"
+                "• El host exista\n"
+                "• Tengas conexión a internet\n\n"
+                "🔄 Intenta con otra dirección.",
+                parse_mode='Markdown'
+            )
+            
     except Exception as e:
+        # Error genérico
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=processing_msg.message_id)
+        except:
+            pass
+            
         bot_logger.log_error(user_id, f"Error en comando destino: {e}", f"Host: {host}")
-        if update.message:
-            await update.message.reply_text(f"Error al hacer ping a {host}: {str(e)}")
+        await update.message.reply_text(
+            f"💥 **Error inesperado al hacer ping a {host}:**\n\n"
+            f"Error: `{str(e)[:100]}...`\n\n"
+            "🔄 Intenta nuevamente o contacta al administrador.",
+            parse_mode='Markdown'
+        )
 
 async def monitorear(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -138,6 +198,9 @@ async def monitorear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.application.create_task(context.bot.send_message(chat_id=chat_id, text=msg))
 
     try:
+        # Informar que se está iniciando
+        setup_msg = await update.message.reply_text(f"⚙️ Configurando monitoreo para `{host}`...", parse_mode='Markdown')
+        
         # Detener monitoreo previo si existe
         if user_id in monitoring_services:
             old_host = getattr(monitoring_services[user_id], 'host', 'unknown')
@@ -151,11 +214,39 @@ async def monitorear(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Registrar inicio de monitoreo
         bot_logger.log_monitoring_start(user_id, host)
         
-        await update.message.reply_text(f"Monitoreo iniciado para {host}.")
+        # Eliminar mensaje de configuración
+        await context.bot.delete_message(chat_id=chat_id, message_id=setup_msg.message_id)
         
+        await update.message.reply_text(
+            f"🔍 **Monitoreo iniciado para {host}:**\n\n"
+            f"📊 Intervalo: cada **{MONITOR_INTERVAL} segundos**\n"
+            f"🚨 Alertas automáticas por fallos\n"
+            f"📈 Datos publicados en MQTT\n"
+            f"📊 Estadísticas en tiempo real\n"
+            f"🛡️ Validación robusta de red\n\n"
+            f"⏹️ Usa `/detener` para finalizar\n"
+            f"📋 Usa `/estadisticas` para ver métricas",
+            parse_mode='Markdown'
+        )
+        
+    except NetworkError as net_err:
+        bot_logger.log_error(user_id, f"Error de red iniciando monitoreo: {net_err}", f"Host: {host}")
+        await update.message.reply_text(
+            f"🚫 **Error de red al configurar monitoreo:**\n\n"
+            f"Host: `{host}`\n"
+            f"Error: `{str(net_err)}`\n\n"
+            "Verifica la dirección y conexión.",
+            parse_mode='Markdown'
+        )
     except Exception as e:
         bot_logger.log_error(user_id, f"Error iniciando monitoreo: {e}", f"Host: {host}")
-        await update.message.reply_text(f"Error al iniciar monitoreo para {host}: {str(e)}")
+        await update.message.reply_text(
+            f"💥 **Error iniciando monitoreo:**\n\n"
+            f"Host: `{host}`\n"
+            f"Error: `{str(e)[:100]}...`\n\n"
+            "🔄 Intenta nuevamente.",
+            parse_mode='Markdown'
+        )
 
 async def detener(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -306,6 +397,60 @@ async def estado_logs(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_logger.log_error(user_id, f"Error en comando estado_logs: {e}", "Comando estado_logs")
         await update.message.reply_text(f"Error al obtener estado de logs: {str(e)}")
 
+async def estadisticas(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra estadísticas del monitoreo activo del usuario."""
+    user_id = update.effective_user.id
+    username = update.effective_user.username
+    
+    bot_logger.log_command(user_id, "estadisticas", username=username)
+    
+    try:
+        if user_id not in monitoring_services:
+            await update.message.reply_text(
+                "📊 **No hay monitoreo activo.**\n\n"
+                "Inicia monitoreo con:\n"
+                "`/monitorear <host>`\n\n"
+                "Ejemplo: `/monitorear google.com`",
+                parse_mode='Markdown'
+            )
+            return
+        
+        service = monitoring_services[user_id]
+        stats = service.get_statistics()
+        
+        # Formatear estadísticas
+        message = f"📊 **Estadísticas de Monitoreo**\n\n"
+        message += f"🎯 **Host:** `{stats['host']}`\n"
+        message += f"⏱️ **Duración:** {stats['duration_seconds']:.1f} segundos\n"
+        message += f"🏓 **Total pings:** {stats['total_pings']}\n\n"
+        
+        message += f"✅ **Pings exitosos:** {stats['successful_pings']}\n"
+        message += f"❌ **Pings fallidos:** {stats['failed_pings']}\n"
+        message += f"📈 **Tasa de éxito:** {stats['success_rate']:.1f}%\n\n"
+        
+        if stats['successful_pings'] > 0:
+            message += f"⚡ **Latencia promedio:** {stats['average_latency']:.2f} ms\n"
+            if stats['min_latency'] != float('inf'):
+                message += f"🔽 **Latencia mínima:** {stats['min_latency']:.2f} ms\n"
+            message += f"🔺 **Latencia máxima:** {stats['max_latency']:.2f} ms\n\n"
+        
+        message += f"🔴 **Fallos consecutivos actuales:** {stats['consecutive_failures']}\n"
+        message += f"💀 **Máximo fallos consecutivos:** {stats['max_consecutive_failures']}\n\n"
+        
+        message += f"📡 **MQTT publicaciones exitosas:** {stats['mqtt_publish_success']}\n"
+        message += f"🚫 **MQTT publicaciones fallidas:** {stats['mqtt_publish_failures']}\n"
+        if stats['mqtt_publish_success'] > 0 or stats['mqtt_publish_failures'] > 0:
+            message += f"📊 **MQTT tasa de éxito:** {stats['mqtt_success_rate']:.1f}%\n\n"
+        
+        message += f"🔄 **Estado:** {'🟢 Activo' if stats['running'] else '🔴 Detenido'}\n"
+        message += f"📱 **Intervalo:** {MONITOR_INTERVAL} segundos"
+        
+        await update.message.reply_text(message, parse_mode='Markdown')
+        
+    except Exception as e:
+        bot_logger.log_error(user_id, f"Error en comando estadisticas: {e}", "Comando estadisticas")
+        await update.message.reply_text(f"Error al obtener estadísticas: {str(e)}")
+
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja mensajes de texto cuando el usuario está en un estado de espera."""
     user_id = update.effective_user.id
@@ -377,39 +522,77 @@ async def execute_destino(update, context, host, user_id, username):
         # Informar que se está procesando
         processing_msg = await update.message.reply_text(f"🏓 Haciendo ping a `{host}`...", parse_mode='Markdown')
         
-        output = ping_host(host, PING_COUNT)
-        latency, ttl, reachable = parse_ping_output(output)
-        
-        # Registrar resultado del ping
-        bot_logger.log_ping_result(user_id, host, latency, ttl, reachable, output)
-        
-        # Eliminar mensaje de procesamiento
-        await context.bot.delete_message(chat_id=chat_id, message_id=processing_msg.message_id)
-        
-        if reachable:
+        try:
+            output = ping_host(host, PING_COUNT)
+            latency, ttl, reachable, ping_stats = parse_ping_output(output)
+            
+            # Registrar resultado del ping con estadísticas
+            bot_logger.log_ping_result(user_id, host, latency, ttl, reachable, output)
+            
+            # Eliminar mensaje de procesamiento
+            await context.bot.delete_message(chat_id=chat_id, message_id=processing_msg.message_id)
+            
+            if reachable:
+                # Construir mensaje con estadísticas adicionales
+                response_msg = f"✅ **Ping exitoso a {host}:**\n\n"
+                response_msg += f"📊 Latencia promedio: **{latency} ms**\n"
+                response_msg += f"🔢 Saltos (TTL): **{ttl}**\n"
+                
+                # Agregar estadísticas adicionales si están disponibles
+                if ping_stats:
+                    if ping_stats.get('packet_loss') is not None:
+                        response_msg += f"📦 Pérdida de paquetes: **{ping_stats['packet_loss']}%**\n"
+                    if ping_stats.get('min_latency') and ping_stats.get('max_latency'):
+                        response_msg += f"⚡ Rango latencia: **{ping_stats['min_latency']}-{ping_stats['max_latency']} ms**\n"
+                
+                response_msg += f"\n💡 Usa `/monitorear {host}` para monitoreo continuo."
+                
+                await update.message.reply_text(response_msg, parse_mode='Markdown')
+            else:
+                error_details = ""
+                if ping_stats and 'error' in ping_stats:
+                    error_details = f"\n🔍 Detalle: `{ping_stats['error'][:100]}...`"
+                
+                await update.message.reply_text(
+                    f"❌ **No se pudo alcanzar el host {host}.**\n\n"
+                    "Posibles causas:\n"
+                    "• Host no responde a ping\n"
+                    "• Dirección incorrecta\n"
+                    "• Problemas de conectividad\n"
+                    "• Firewall bloqueando ICMP\n\n"
+                    f"{error_details}\n"
+                    "🔄 Intenta con otra dirección.",
+                    parse_mode='Markdown'
+                )
+                
+        except NetworkError as net_err:
+            # Error específico de red (validación, DNS, etc.)
+            await context.bot.delete_message(chat_id=chat_id, message_id=processing_msg.message_id)
+            bot_logger.log_error(user_id, f"Error de red: {net_err}", f"Host: {host}")
+            
             await update.message.reply_text(
-                f"✅ **Ping exitoso a {host}:**\n\n"
-                f"📊 Latencia promedio: **{latency} ms**\n"
-                f"🔢 Saltos (TTL): **{ttl}**\n\n"
-                f"💡 Usa `/monitorear {host}` para monitoreo continuo.",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text(
-                f"❌ **No se pudo alcanzar el host {host}.**\n\n"
-                "Posibles causas:\n"
-                "• Host no responde a ping\n"
-                "• Dirección incorrecta\n"
-                "• Problemas de conectividad\n\n"
+                f"🚫 **Error de red con {host}:**\n\n"
+                f"📋 Detalle: `{str(net_err)}`\n\n"
+                "Verifica que:\n"
+                "• La dirección sea válida\n"
+                "• El host exista\n"
+                "• Tengas conexión a internet\n\n"
                 "🔄 Intenta con otra dirección.",
                 parse_mode='Markdown'
             )
+            
     except Exception as e:
+        # Error genérico
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=processing_msg.message_id)
+        except:
+            pass
+            
         bot_logger.log_error(user_id, f"Error en comando destino: {e}", f"Host: {host}")
         await update.message.reply_text(
-            f"💥 **Error al hacer ping a {host}:**\n\n"
-            f"Error: `{str(e)}`\n\n"
-            "🔄 Intenta nuevamente.",
+            f"💥 **Error inesperado al hacer ping a {host}:**\n\n"
+            f"Error: `{str(e)[:100]}...`\n\n"
+            "🔄 Intenta nuevamente o contacta al administrador.",
             parse_mode='Markdown'
         )
 
@@ -445,10 +628,13 @@ async def execute_monitorear(update, context, host, user_id, username):
         
         await update.message.reply_text(
             f"🔍 **Monitoreo iniciado para {host}:**\n\n"
-            f"📊 Intervalo: cada **{5} segundos**\n"
-            f"🚨 Recibirás alertas automáticas si hay fallos\n"
-            f"📈 Los datos se publican en MQTT\n\n"
-            f"⏹️ Usa `/detener` para finalizar el monitoreo.",
+            f"📊 Intervalo: cada **{MONITOR_INTERVAL} segundos**\n"
+            f"🚨 Alertas automáticas por fallos\n"
+            f"📈 Datos publicados en MQTT\n"
+            f"📊 Estadísticas en tiempo real\n"
+            f"🛡️ Validación robusta de red\n\n"
+            f"⏹️ Usa `/detener` para finalizar\n"
+            f"📋 Usa `/estadisticas` para ver métricas",
             parse_mode='Markdown'
         )
         
@@ -503,17 +689,20 @@ def main():
         app.add_handler(CommandHandler("logs", logs))
         app.add_handler(CommandHandler("limpiar_logs", limpiar_logs))
         app.add_handler(CommandHandler("estado_logs", estado_logs))
+        app.add_handler(CommandHandler("estadisticas", estadisticas))
         app.add_handler(CommandHandler("ayuda", start))  # Alias para start
         app.add_handler(CommandHandler("cancelar", cancelar))
         
         # Handler para mensajes de texto (debe ir después de los comandos)
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
         
-        handlers_list = ["start", "destino", "monitorear", "detener", "logs", "limpiar_logs", "estado_logs", "ayuda", "cancelar", "text_handler"]
+        handlers_list = ["start", "destino", "monitorear", "detener", "estadisticas", "logs", "limpiar_logs", "estado_logs", "ayuda", "cancelar", "text_handler"]
         bot_logger.log_system_event("bot_handlers_configured", {"handlers": handlers_list})
         
         print("🤖 Bot iniciado correctamente. Sistema de logging activado.")
         print("📁 Los logs se guardan en la carpeta 'logs/'")
+        print("🛡️ Sistema de seguridad y validación activo.")
+        print(f"⏱️ Intervalo de monitoreo: {MONITOR_INTERVAL} segundos (seguro para el servidor)")
         
         app.run_polling()
         
