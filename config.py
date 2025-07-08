@@ -15,3 +15,9 @@ MQTT_TOPIC = os.getenv("MQTT_TOPIC")
 # Parámetros de monitoreo
 PING_COUNT = int(os.getenv("PING_COUNT", 4))
 MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", 5))  # segundos
+
+# Configuración de logging
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_RETENTION_DAYS = int(os.getenv("LOG_RETENTION_DAYS", 30))  # días
+LOGS_DIRECTORY = os.getenv("LOGS_DIRECTORY", "logs")
+ENABLE_DEBUG_LOGS = os.getenv("ENABLE_DEBUG_LOGS", "false").lower() == "true"

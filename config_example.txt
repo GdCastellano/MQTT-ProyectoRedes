@@ -1,0 +1,44 @@
+# Configuración del Bot de Monitoreo de Red
+# Copia estas líneas a tu archivo .env y configura los valores según tu entorno
+
+# ==================== TELEGRAM BOT ====================
+# Token del bot de Telegram (obtenido de @BotFather)
+TELEGRAM_TOKEN=your_telegram_bot_token_here
+
+# ==================== MQTT BROKER ====================
+# Configuración del broker MQTT para publicar métricas
+MQTT_BROKER=localhost
+MQTT_PORT=1883
+MQTT_TOPIC=network/monitoring
+
+# ==================== MONITOREO ====================
+# Configuración de parámetros de ping y monitoreo
+PING_COUNT=4
+MONITOR_INTERVAL=5
+
+# ==================== LOGGING ====================
+# Configuración del sistema de logging
+
+# Directorio donde se guardarán los logs
+LOGS_DIRECTORY=logs
+
+# Nivel de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+LOG_LEVEL=INFO
+
+# Días para retener logs antes de eliminarlos automáticamente
+LOG_RETENTION_DAYS=30
+
+# Habilitar logs de debug más detallados (true/false)
+ENABLE_DEBUG_LOGS=false
+
+# ==================== EJEMPLO DE CONFIGURACIÓN COMPLETA ====================
+# TELEGRAM_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+# MQTT_BROKER=192.168.1.100
+# MQTT_PORT=1883
+# MQTT_TOPIC=home/network/monitoring
+# PING_COUNT=4
+# MONITOR_INTERVAL=10
+# LOGS_DIRECTORY=./logs
+# LOG_LEVEL=INFO
+# LOG_RETENTION_DAYS=60
+# ENABLE_DEBUG_LOGS=false 
